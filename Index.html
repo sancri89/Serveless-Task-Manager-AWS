@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Task Manager</title>
+</head>
+<body>
+  <div id="app">
+    <h1>Task Manager</h1>
+
+    <button id="loginBtn">Sign in</button>
+
+    <div id="tasks" style="display: none;">
+      <input id="taskTitle" placeholder="New task" maxlength="200">
+      <button id="addTaskBtn">Add task</button>
+
+      <p id="message"></p>
+      <ul id="taskList"></ul>
+    </div>
+  </div>
+
+  <script>
+    const COGNITO_DOMAIN =
+      "https://us-east-12cvj5e1hs.auth.us-east-1.amazoncognito.com";
+
+    const CLIENT_ID = "5bi9s6j0d0v6lrqccqau592s90";
+
+    const REDIRECT_URI = window.location.origin;
+
+    const API_BASE =
+      "https://vgfrvhxec0.execute-api.us-east-1.amazonaws.com/";
+
+    function getTokensFromUrl() {
+      const hash = window.location.hash.substring(1);
+      const params = new URLSearchParams(hash);
+
+      return {
+        idToken: params.get("id_token"),
+        accessToken: params.get("access_token")
+      };
+    }
+
+    function showMessage(message) {
+      document.getElementById("message").textContent = message;
+    }
+
+    document.getElementById("loginBtn").onclick = () => {
+      const loginUrl =
+        `${COGNITO_DOMAIN}/login` +
+        `?client_id=${CLIENT_ID}` +
+        `&response_type=token` +
+        `&scope=openid+email` +
+        `&redirect_uri=${encodeURIComponent(REDIRECT_URI)}`;
+
+      window.location.href = loginUrl;
+    };
+
+    const { accessToken } = getTokensFromUrl();
+    const token = accessToken;
+
+    if (token) {
+      document.getElementById("loginBtn").style.display = "none";
+      document.getElementById("tasks").style.display = "block";
+      loadTasks();
+    }
+
+    async function loadTasks() {
+      try {
+        const res = await fetch(`${API_BASE}/tasks`, {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        });
+
+        if (!res.ok) {
+          throw new Error(`Could not load tasks: HTTP ${res.status}`);
+        }
+
+        const items = await res.json();
+
+        document.getElementById("taskList").innerHTML =
+          items.map(item => `<li>${item.title}</li>`).join("");
+
+      } catch (error) {
+        showMessage(error.message);
+        console.error(error);
+      }
+    }
+
+    document.getElementById("addTaskBtn").onclick = async () => {
+      const input = document.getElementById("taskTitle");
+      const title = input.value.trim();
+
+      if (!title) {
+        showMessage("Enter a task title first.");
+        return;
+      }
+
+      try {
+        const res = await fetch(`${API_BASE}/tasks`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ title })
+        });
+
+        if (!res.ok) {
+          const errorBody = await res.text();
+          throw new Error(
+            `Could not create task: HTTP ${res.status} ${errorBody}`
+          );
+        }
+
+        input.value = "";
+        showMessage("Task created.");
+        await loadTasks();
+
+      } catch (error) {
+        showMessage(error.message);
+        console.error(error);
+      }
+    };
+  </script>
+</body>
+</html>
